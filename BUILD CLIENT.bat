@@ -1,8 +1,8 @@
 cd LouveSystems.Logger
-dotnet publish -c Release -f netcoreapp3.0
-mkdir ..\Release\netcoreapp3.0
-copy bin\Release\netcoreapp3.0\publish\LouveSystems.Logger.dll ..\Release\netcoreapp3.0\.
-dotnet publish -c Release -f net471
-mkdir ..\Release\net471
-copy bin\Release\net471\publish\LouveSystems.Logger.dll ..\Release\net471\.
+dotnet publish -c Release -f net6.0
+mkdir ..\Release\net6.0
+copy bin\Release\net6.0\publish\LouveSystems.Logger.dll ..\Release\net6.0\.
+dotnet publish -c Release -f net472
+mkdir ..\Release\net472
+copy bin\Release\net472\publish\LouveSystems.Logger.dll ..\Release\net472\.
 PAUSE

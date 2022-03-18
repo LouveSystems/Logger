@@ -6,24 +6,16 @@ namespace LouveSystems.Logging
 {
     public static class StaticLogger
     {
-        public static Logger singleLogger { private set; get; }
+        public static Logger SingleLogger { private set; get; }
 
-        // SINGLE LOGGER
-        public static void Initialize(string programName, bool outputToFile = false, bool outputToConsole = true)
+        public static void Initialize(Logger logger)
         {
-            singleLogger = new Logger(programName, outputToFile, outputToConsole);
+            SingleLogger = logger;
         }
-        public static void Trace(params object[] msgs) { singleLogger.Trace(msgs); }
-        public static void Debug(params object[] msgs) { singleLogger.Debug(msgs); }
-        public static void Info(params object[] msgs) { singleLogger.Info(msgs); }
-        public static void Warn(params object[] msgs) { singleLogger.Warn(msgs); }
-        public static void Error(params object[] msgs) { singleLogger.Error(msgs); }
-        public static void Fatal(Exception e)
-        {
-            Error(new string[1] { "================== FATAL ==================" });
-            Error(e);
-            Console.ReadKey();
-            Environment.Exit(1);
-        }
+        public static void Trace(object msgs) { SingleLogger.Trace(msgs); }
+        public static void Debug(object msgs) { SingleLogger.Debug(msgs); }
+        public static void Info(object msgs) { SingleLogger.Info(msgs); }
+        public static void Warn(object msgs) { SingleLogger.Warn(msgs); }
+        public static void Error(object msgs) { SingleLogger.Error(msgs); }
     }
 }

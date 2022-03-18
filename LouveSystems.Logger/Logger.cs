@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 
@@ -11,10 +12,13 @@ namespace LouveSystems.Logging
     public class Logger
     {
         public enum LEVEL { TRACE, DEBUG, WARNING, INFO, ERROR };
-        
-        readonly string logFilePath = @"logs/{0}{1}.log";
+        public LEVEL Level { private set; get; }
 
-        LEVEL level;
+        readonly string logFilePath;
+        readonly bool outputToFile;
+        readonly bool outputToConsole;
+        readonly string programName;
+
         CultureInfo culture = new CultureInfo("fr-FR");
         Dictionary<LEVEL, ConsoleColor> colors = new Dictionary<LEVEL, ConsoleColor>()
         {
@@ -24,25 +28,19 @@ namespace LouveSystems.Logging
             {LEVEL.WARNING, ConsoleColor.Yellow },
             {LEVEL.ERROR, ConsoleColor.Red }
         };
+
         int flushEvery = 1000;
 
-        bool outputToFile = false;
-        bool outputToConsole = true;
 
-        FileStream logFileStream = null;
-        string programName;
+        StreamWriter logWriter = null;
         Timer flushTimer;
-        Action<object> logFunction = (Action<object>)Console.WriteLine;
+        Action<object> consoleLogFunction = Console.WriteLine;
 
-        public Logger(string programName = null, bool outputToFile = false, bool outputToConsole = true)
+        public Logger(string programName = null, bool outputToFile = false, bool outputToConsole = true, string outputFilePathFormat = @"logs/{0}{1}.log")
         {
             if (programName == null) programName = Path.GetFileNameWithoutExtension(Process.GetCurrentProcess().MainModule.FileName);
 
-            this.Initialize(programName, outputToFile, outputToConsole);
-        }
-
-        void Initialize(string programName, bool outputToFile = false, bool outputToConsole = true)
-        {
+            this.logFilePath = outputFilePathFormat;
             this.programName = programName;
             this.outputToFile = outputToFile;
             this.outputToConsole = outputToConsole;
@@ -55,17 +53,16 @@ namespace LouveSystems.Logging
                     )
                 );
 
-                if (flushTimer != null) flushTimer.Dispose();
-                if (logFileStream != null) logFileStream.Dispose();
-                logFileStream = null;
+                logWriter = null;
 
                 int i = 0;
-                while (logFileStream == null) {
+                while (logWriter == null) {
                     try {
                         filePath = string.Format(logFilePath, this.programName, i == 0 ? "" : i.ToString());
                         if (File.Exists(filePath)) File.Delete(filePath);
 
-                        logFileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Read);
+                        var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Read);
+                        logWriter = new StreamWriter(fs, Encoding.UTF8);
                     }
                     catch (IOException) {
                         // File is locked - increment and retry
@@ -80,7 +77,7 @@ namespace LouveSystems.Logging
 
                 flushTimer = new Timer(
                     e => {
-                        logFileStream.Flush();
+                        logWriter.Flush();
                     },
                     null,
                     TimeSpan.Zero,
@@ -90,64 +87,45 @@ namespace LouveSystems.Logging
 
         public void SetLevel(LEVEL level)
         {
-            this.level = level;
+            this.Level = level;
         }
 
         public void SetConsoleFunction(Action<object> function)
         {
-            this.logFunction = function;
+            this.consoleLogFunction = function;
         }
 
-        public void Trace(params object[] msgs) { LogMessage(LEVEL.TRACE, msgs); }
-        public void Debug(params object[] msgs) { LogMessage(LEVEL.DEBUG, msgs); }
-        public void Info(params object[] msgs) { LogMessage(LEVEL.INFO, msgs); }
-        public void Warn(params object[] msgs) { LogMessage(LEVEL.WARNING, msgs); }
-        public void Error(params object[] msgs) { LogMessage(LEVEL.ERROR, msgs); }
-        public void Fatal(Exception e)
-        {
-            LogMessage(LEVEL.ERROR, new string[1] { "================== FATAL ==================" });
-            LogMessage(LEVEL.ERROR, e);
-            Console.ReadKey();
-            Environment.Exit(1);
-        }
+        public void Trace(object msgs, [CallerFilePath] string filePath = "") { LogMessage(LEVEL.TRACE, msgs); }
+        public void Debug(object msgs, [CallerFilePath] string filePath = "") { LogMessage(LEVEL.DEBUG, msgs); }
+        public void Info(object msgs, [CallerFilePath] string filePath = "") { LogMessage(LEVEL.INFO, msgs); }
+        public void Warn(object msgs, [CallerFilePath] string filePath = "") { LogMessage(LEVEL.WARNING, msgs); }
+        public void Error(object msgs, [CallerFilePath] string filePath = "") { LogMessage(LEVEL.ERROR, msgs); }
 
-        void LogMessage(LEVEL msgLevel, params object[] msgs)
+        void LogMessage(LEVEL msgLevel, object msgs, string filePath = "")
         {
-            if (msgLevel < level) {
+            if (msgLevel < Level) {
                 return;
             }
 
-            string caller = "---";
-
-#if DEBUG
-            StackFrame sf = new StackFrame(2, true);
-            string file = sf.GetMethod().DeclaringType.Name;
-            string method = sf.GetMethod().Name;
-            try {
-                caller = string.Format("{0}   {1}",
-                    file.Substring(0, Math.Min(file.Length, 8)).PadRight(8),
-                    method.Substring(0, Math.Min(method.Length, 14)).PadRight(14)
-                );
-            }
-            catch (NullReferenceException) {
-                caller = "???";
-            }
-#endif
-
             // Debug line formatting
             string line = "{0} [{1}] [{2}]:{3}";
-            line = string.Format(line, DateTime.Now.ToString(culture.DateTimeFormat.LongTimePattern), msgLevel.ToString(), caller, string.Join(" ", msgs));
+            line = string.Format(line, DateTime.Now.ToString(culture.DateTimeFormat.LongTimePattern), msgLevel.ToString(), filePath, string.Join(" ", msgs));
 
             if (outputToConsole) {
                 Console.ForegroundColor = colors[msgLevel];
-                logFunction(line);
+                consoleLogFunction(line);
             }
 
             if (outputToFile) {
-                using (StreamWriter sw = new StreamWriter(logFileStream, Encoding.UTF8, 1024, leaveOpen: true)) {
-                    sw.WriteLine(line);
-                }
+                logWriter.WriteLine(line);
             }
+        }
+
+        ~Logger()
+        {
+            if (flushTimer != null) flushTimer.Dispose();
+            if (logWriter.BaseStream != null) logWriter.BaseStream.Dispose();
+            if (logWriter != null) logWriter.Dispose();
         }
     }
 }
